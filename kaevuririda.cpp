@@ -6,7 +6,7 @@ KaevuriRida::KaevuriRida(QWidget *parent) : QHBoxLayout(parent)
     nameLabel = new QLabel();
     portLabel = new QLabel();
     timeLabel = new QLabel(QTime::currentTime().toString("hh:mm:ss"));
-    statusLabel = new QLabel("teadmata");
+    statusLabel = new QLabel("unknown");
     restartButton = new QPushButton("Restart");
     connect(restartButton, SIGNAL(pressed()), this, SLOT(orderRestart()));
 

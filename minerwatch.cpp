@@ -23,7 +23,7 @@ MinerWatch::MinerWatch(QWidget *parent) :
     server = false;
     udpSocket = new QUdpSocket(this);
     serial = new QSerialPort(this);
-    connect(serial, SIGNAL(readyRead()), this, SLOT(loeSerialist()));
+    connect(serial, SIGNAL(readyRead()), this, SLOT(readFromSerial()));
 
     //Vaikimisi seaded Arduino jaoks, loetakse conf failist üle
     settings.baudRate = QSerialPort::Baud9600;
@@ -31,9 +31,9 @@ MinerWatch::MinerWatch(QWidget *parent) :
     settings.parity = QSerialPort::NoParity;
     settings.stopBits = QSerialPort::OneStop;
     settings.flowControl = QSerialPort::NoFlowControl;    //Vaikimisi Arduinol seda ei ole.
-    otsiSerialiNimi();
+    findSerialName();
 
-    doesNotReplyTime = 120;
+    noReplyTime = 120;
     heartBeatTime = 300;
     checkInterval = 5;
     maxRestartNo = 3;
@@ -42,16 +42,16 @@ MinerWatch::MinerWatch(QWidget *parent) :
     restartTime2=1800;
     restartTime3=7200;
 
-    loeConfFail();
-    avaSerial();
+    readConfFail();
+    openSerial();
 
-    kontroll.setInterval(checkInterval * 1000);
-    kontroll.setSingleShot(false);
-    connect(&kontroll, SIGNAL(timeout()), this, SLOT(staatuseKontroll()));
+    checkTimer.setInterval(checkInterval * 1000);
+    checkTimer.setSingleShot(false);
+    connect(&checkTimer, SIGNAL(timeout()), this, SLOT(statusCheck()));
 //    std::cout << "cout << start" << endl;
     if(verbose)
         QTextStream(stdout) << "start" << endl;
-    kirjutaLogisse("Start");
+    writeToLog("Start");
 }
 
 MinerWatch::~MinerWatch()
@@ -59,7 +59,7 @@ MinerWatch::~MinerWatch()
     delete ui;
 }
 
-void MinerWatch::avaSerial()
+void MinerWatch::openSerial()
 {
     serial->setPortName(settings.serialName);
     serial->setBaudRate(settings.baudRate);
@@ -76,14 +76,14 @@ void MinerWatch::avaSerial()
     }
 }
 
-void MinerWatch::kirjutaLogisse(QString s)
+void MinerWatch::writeToLog(QString s)
 {
     QTextStream valja(logi);
     valja.setCodec("UTF-8");
     valja << QDateTime::currentDateTime().toString("dd.MM.yyyy hh:mm:ss") << ": " << s << endl;
 }
 
-void MinerWatch::loeConfFail()
+void MinerWatch::readConfFail()
 {
     QFile file("config.txt");
     if (file.open(QIODevice::ReadOnly | QIODevice::Text)){
@@ -96,133 +96,135 @@ void MinerWatch::loeConfFail()
                     QStringList read = line.split(';'); //Nimi;number
                     if(read.count() < 2)
                         return; //Rida oli liiga lühike
-                    KaevuriRida* kaevuriRida = new KaevuriRida();
-                    connect(kaevuriRida, SIGNAL(orderRestart(QString)), this, SLOT(teeRestart(QString)));
-                    kaevuriRida->nameLabel->setText(read.at(0));
-                    kaevuriRida->portLabel->setText(read.at(1));
-                    if(QString::compare(read.at(0), oma_nimi) == 0){ //Juhuks, kui loetelus on ka juhtkaevur ise, et sellele restarti ei tehtaks
-                        kaevuriRida->statusLabel->setText("ise");
-                        kaevuriRida->restartButton->setEnabled(false);
+                    KaevuriRida* minerRow = new KaevuriRida();
+                    connect(minerRow, SIGNAL(orderRestart(QString)), this, SLOT(doRestart(QString)));
+                    minerRow->nameLabel->setText(read.at(0));
+                    minerRow->portLabel->setText(read.at(1));
+                    if(QString::compare(read.at(0), own_name) == 0){ //Juhuks, kui loetelus on ka juhtkaevur ise, et sellele restarti ei tehtaks
+                        minerRow->statusLabel->setText("this");
+                        minerRow->restartButton->setEnabled(false);
                     }
 
-                    kaevuriRead.append(kaevuriRida);
-                    ui->verticalLayout->addLayout(kaevuriRead.last());
-                }else if(line.startsWith("oma_nimi=")){
-                    oma_nimi = line.mid(line.indexOf('=') + 1);
-                    this->setWindowTitle("MinerWatch - " + oma_nimi);
+                    minerRows.append(minerRow);
+                    ui->verticalLayout->addLayout(minerRows.last());
+                }else if(line.startsWith("own_name=")){
+                    own_name = line.mid(line.indexOf('=') + 1);
+                    this->setWindowTitle("MinerWatch - " + own_name);
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): oma_nimi=" << oma_nimi << endl;
+                        QTextStream(stdout) << "readConfFail(): own_name=" << own_name << endl;
                 }else if(line.startsWith("server=yes")){
                     server = true;
                     udpSocket->bind(57615, QUdpSocket::ShareAddress);
-                    connect(udpSocket, SIGNAL(readyRead()), SLOT(loeTeateid()));
+                    connect(udpSocket, SIGNAL(readyRead()), SLOT(readBroadcasts()));
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): server=yes" << endl;
+                        QTextStream(stdout) << "readConfFail(): server=yes" << endl;
                 }else if(line.startsWith("server=no")){
                     server = false;
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): server=no" << endl;
+                        QTextStream(stdout) << "readConfFail(): server=no" << endl;
                 }else if(line.startsWith("baudRate=", Qt::CaseInsensitive)){
                     settings.baudRate = static_cast<QSerialPort::BaudRate>(line.mid(line.indexOf('=') + 1).toInt());
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): baudRate=" << settings.baudRate << endl;
+                        QTextStream(stdout) << "readConfFail(): baudRate=" << settings.baudRate << endl;
                 }else if(line.startsWith("dataBits=", Qt::CaseInsensitive)){
                     settings.dataBits = static_cast<QSerialPort::DataBits>(line.mid(line.indexOf('=') + 1).toInt());
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): dataBits=" << settings.dataBits << endl;
+                        QTextStream(stdout) << "readConfFail(): dataBits=" << settings.dataBits << endl;
                 }else if(line.startsWith("parity=", Qt::CaseInsensitive)){
                     settings.parity = static_cast<QSerialPort::Parity>(line.mid(line.indexOf('=') + 1).toInt());
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): parity=" << settings.parity << endl;
+                        QTextStream(stdout) << "readConfFail(): parity=" << settings.parity << endl;
                 }else if(line.startsWith("stopBits=", Qt::CaseInsensitive)){
                     settings.stopBits = static_cast<QSerialPort::StopBits>(line.mid(line.indexOf('=') + 1).toInt());
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): stopBits=" << settings.stopBits << endl;
+                        QTextStream(stdout) << "readConfFail(): stopBits=" << settings.stopBits << endl;
                 }else if(line.startsWith("heartBeatTime=", Qt::CaseInsensitive)){
                     heartBeatTime = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): heartBeatTime=" << heartBeatTime << endl;
+                        QTextStream(stdout) << "readConfFail(): heartBeatTime=" << heartBeatTime << endl;
                 }else if(line.startsWith("checkInterval=", Qt::CaseInsensitive)){
                     checkInterval = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): checkInterval=" << checkInterval << endl;
+                        QTextStream(stdout) << "readConfFail(): checkInterval=" << checkInterval << endl;
                  }else if(line.startsWith("resetPressTime=", Qt::CaseInsensitive)){
                    resetPressTime = line.mid(line.indexOf('=') + 1).toInt();
                    if(verbose)
-                       QTextStream(stdout) << "loeConfFail(): resetPressTime=" << resetPressTime << endl;
+                       QTextStream(stdout) << "readConfFail(): resetPressTime=" << resetPressTime << endl;
                 }else if(line.startsWith("maxRestartNo=", Qt::CaseInsensitive)){
                     maxRestartNo = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): maxRestartNo=" << maxRestartNo << endl;
-                 }else if(line.startsWith("doesNotReplyTime=", Qt::CaseInsensitive)){
-                    doesNotReplyTime = line.mid(line.indexOf('=') + 1).toInt();
+                        QTextStream(stdout) << "readConfFail(): maxRestartNo=" << maxRestartNo << endl;
+                 }else if(line.startsWith("noReplyTime=", Qt::CaseInsensitive)){
+                    noReplyTime = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): doesNotReplyTime=" << doesNotReplyTime << endl;
+                        QTextStream(stdout) << "readConfFail(): noReplyTime=" << noReplyTime << endl;
                  }else if(line.startsWith("restartTime1=", Qt::CaseInsensitive)){
                     restartTime1 = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): restartTime1=" << restartTime1 << endl;
+                        QTextStream(stdout) << "readConfFail(): restartTime1=" << restartTime1 << endl;
                  }else if(line.startsWith("restartTime2=", Qt::CaseInsensitive)){
                     restartTime2 = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): restartTime2=" << restartTime2 << endl;
+                        QTextStream(stdout) << "readConfFail(): restartTime2=" << restartTime2 << endl;
                  }else if(line.startsWith("restartTime3=", Qt::CaseInsensitive)){
                     restartTime3 = line.mid(line.indexOf('=') + 1).toInt();
                     if(verbose)
-                        QTextStream(stdout) << "loeConfFail(): restartTime3=" << restartTime3 << endl;
-                 }
+                        QTextStream(stdout) << "readConfFail(): restartTime3=" << restartTime3 << endl;
+                }else{
+                    QTextStream(stdout) << "readConfFail(): unknown setting: " << line << endl;
+                }
             }
         }
         ui->verticalLayout->addStretch();
         file.close();
     }else{
-        QMessageBox::critical(this, "MinerWatch", "Konfiguratsiooni faili ei leitud!", QMessageBox::Ok);
+        QMessageBox::critical(this, "MinerWatch", "Configuration file not found!", QMessageBox::Ok);
     }
-    kontroll.setInterval(checkInterval * 1000);
-    kontroll.start();
+    checkTimer.setInterval(checkInterval * 1000);
+    checkTimer.start();
 }
 
-void MinerWatch::loeSerialist()
+void MinerWatch::readFromSerial()
 {
-    QString saabunud(serial->readAll());
+    QString received(serial->readAll());
     if(verbose)
-        QTextStream(stdout) << "Serialist loetud: " << saabunud << endl;
-    if(saabunud.contains("Tere")){
+        QTextStream(stdout) << "Read from serial: " << received << endl;
+    if(received.contains("Tere")){
         serial->write("a");
         if(verbose)
-            QTextStream(stdout) << "Serialisse saadetud: " << "a" << endl;
+            QTextStream(stdout) << "Sent to serial: " << "a" << endl;
         serial->write(QByteArray::number(heartBeatTime));
         serial->waitForBytesWritten();
         if(verbose)
-            QTextStream(stdout) << "Serialisse saadetud: " << QByteArray::number(heartBeatTime) << endl;
+            QTextStream(stdout) << "Sent to serial: " << QByteArray::number(heartBeatTime) << endl;
 
         serial->write("d");
         if(verbose)
-            QTextStream(stdout) << "Serialisse saadetud: " << "d" << endl;
+            QTextStream(stdout) << "Sent to serial: " << "d" << endl;
         serial->write(QByteArray::number(resetPressTime));
         if(verbose)
-            QTextStream(stdout) << "Serialisse saadetud: " << QByteArray::number(resetPressTime) << endl;
+            QTextStream(stdout) << "Sent to serial: " << QByteArray::number(resetPressTime) << endl;
     }
 }
 
-void MinerWatch::loeTeateid()
+void MinerWatch::readBroadcasts()
 {
     QByteArray datagram;
     while (udpSocket->hasPendingDatagrams()) {
         datagram.resize(int(udpSocket->pendingDatagramSize()));
         udpSocket->readDatagram(datagram.data(), datagram.size());
-        statusBar()->showMessage(tr("Saadud teade: \"%1\"").arg(datagram.constData()), 5000);
-        QString nimi(datagram);
-        nimi.chop(nimi.length() - nimi.indexOf(' '));
-        for(int i = 0; i < kaevuriRead.count(); i++){
-            if(QString::compare(kaevuriRead[i]->nameLabel->text(), nimi) == 0){
-                kaevuriRead[i]->alive();
+        statusBar()->showMessage(tr("Received broadcast: \"%1\"").arg(datagram.constData()), 5000);
+        QString name(datagram);
+        name.chop(name.length() - name.indexOf(' '));
+        for(int i = 0; i < minerRows.count(); i++){
+            if(QString::compare(minerRows[i]->nameLabel->text(), name) == 0){
+                minerRows[i]->alive();
             }
         }
     }
 }
 
-void MinerWatch::otsiSerialiNimi()
+void MinerWatch::findSerialName()
 {
     ports = QSerialPortInfo::availablePorts();
     if(verbose)
@@ -239,66 +241,66 @@ void MinerWatch::otsiSerialiNimi()
     }
 }
 
-void MinerWatch::staatuseKontroll()
+void MinerWatch::statusCheck()
 {
     if(server){ //Server loeb teateid
-//        QMessageBox::information(this, "MinerWatch", "Staatusekontroll", QMessageBox::Ok);
-        QTime aeg(QTime::currentTime());
+//        QMessageBox::information(this, "MinerWatch", "statusCheck", QMessageBox::Ok);
+        QTime time(QTime::currentTime());
         serial->write("e"); //Arduinole enda elusolemise teate saatmine (e = olen elus)
 
         if(verbose)
-            QTextStream(stdout) << aeg.toString("hh:mm:ss") << " Saadan serialisse: e" << endl;
+            QTextStream(stdout) << time.toString("hh:mm:ss") << " Sending to serial: e" << endl;
 
-        for(int i = 0; i < kaevuriRead.count(); i++){
-            if(kaevuriRead[i]->timeLabel->text() != "00:00:00"){
-//                kaevuriRead[0]->portLabel->setText(QString("%1").arg(aeg.secsTo(QTime::fromString(kaevuriRead[i]->timeLabel->text()))));
-                if(aeg.secsTo(QTime::fromString(kaevuriRead[i]->timeLabel->text())) < -restartTime1 && kaevuriRead[i]->restartNo == 0 && !kaevuriRead[i]->statusLabel->text().contains("ise")){
-                    QString saadetis = QString("r%1").arg(kaevuriRead[i]->portLabel->text());   //Pesa nr on kirjas sildil
+        for(int i = 0; i < minerRows.count(); i++){
+            if(minerRows[i]->timeLabel->text() != "00:00:00"){
+//                minerRows[0]->portLabel->setText(QString("%1").arg(time.secsTo(QTime::fromString(minerRows[i]->timeLabel->text()))));
+                if(time.secsTo(QTime::fromString(minerRows[i]->timeLabel->text())) < -restartTime1 && minerRows[i]->restartNo == 0 && !minerRows[i]->statusLabel->text().contains("this")){
+                    QString package = QString("r%1").arg(minerRows[i]->portLabel->text());   //Pesa nr on kirjas sildil
                     if(verbose)
-                        QTextStream(stdout) << aeg.toString("hh:mm:ss") << " Saadan serialisse: " << saadetis << endl;
-                    serial->write(saadetis.toLatin1());
-                    kaevuriRead[i]->statusLabel->setText("1. restart");
-                    kaevuriRead[i]->restartNo++;
-                    kirjutaLogisse(kaevuriRead[i]->nameLabel->text() + ", pesa: " + kaevuriRead[i]->portLabel->text() + ", viimane vastus: " + kaevuriRead[i]->timeLabel->text() + ", 1. restart");
-                }else if(aeg.secsTo(QTime::fromString(kaevuriRead[i]->timeLabel->text())) < -restartTime2 && kaevuriRead[i]->restartNo == 1){
-                    QString saadetis = QString("r%1").arg(kaevuriRead[i]->portLabel->text());   //Pesa nr on kirjas sildil
+                        QTextStream(stdout) << time.toString("hh:mm:ss") << " Sending to serial: " << package << endl;
+                    serial->write(package.toLatin1());
+                    minerRows[i]->statusLabel->setText("1. restart");
+                    minerRows[i]->restartNo++;
+                    writeToLog(minerRows[i]->nameLabel->text() + ", pin: " + minerRows[i]->portLabel->text() + ", last reply: " + minerRows[i]->timeLabel->text() + ", 1. restart");
+                }else if(time.secsTo(QTime::fromString(minerRows[i]->timeLabel->text())) < -restartTime2 && minerRows[i]->restartNo == 1){
+                    QString package = QString("r%1").arg(minerRows[i]->portLabel->text());   //Pesa nr on kirjas sildil
                     if(verbose)
-                        QTextStream(stdout) << aeg.toString("hh:mm:ss") << " Saadan serialisse: " << saadetis << endl;
-                    serial->write(saadetis.toLatin1());
-                    kaevuriRead[i]->statusLabel->setText("2. restart");
-                    kaevuriRead[i]->restartNo++;
-                    kirjutaLogisse(kaevuriRead[i]->nameLabel->text() + ", pesa: " + kaevuriRead[i]->portLabel->text() + ", viimane vastus: " + kaevuriRead[i]->timeLabel->text() + ", 2. restart");
-                }else if(aeg.secsTo(QTime::fromString(kaevuriRead[i]->timeLabel->text())) < -restartTime3 && kaevuriRead[i]->restartNo == 2){
-                    QString saadetis = QString("r%1").arg(kaevuriRead[i]->portLabel->text());   //Pesa nr on kirjas sildil
+                        QTextStream(stdout) << time.toString("hh:mm:ss") << " Sending to serial: " << package << endl;
+                    serial->write(package.toLatin1());
+                    minerRows[i]->statusLabel->setText("2. restart");
+                    minerRows[i]->restartNo++;
+                    writeToLog(minerRows[i]->nameLabel->text() + ", pin: " + minerRows[i]->portLabel->text() + ", last reply: " + minerRows[i]->timeLabel->text() + ", 2. restart");
+                }else if(time.secsTo(QTime::fromString(minerRows[i]->timeLabel->text())) < -restartTime3 && minerRows[i]->restartNo == 2){
+                    QString package = QString("r%1").arg(minerRows[i]->portLabel->text());   //Pesa nr on kirjas sildil
                     if(verbose)
-                        QTextStream(stdout) << aeg.toString("hh:mm:ss") << " Saadan serialisse: " << saadetis << endl;
-                    serial->write(saadetis.toLatin1());
-                    kaevuriRead[i]->statusLabel->setText("3. restart");
-                    kaevuriRead[i]->restartNo++;
-                    kirjutaLogisse(kaevuriRead[i]->nameLabel->text() + ", pesa: " + kaevuriRead[i]->portLabel->text() + ", viimane vastus: " + kaevuriRead[i]->timeLabel->text() + ", 3. restart");
-                }else if(aeg.secsTo(QTime::fromString(kaevuriRead[i]->timeLabel->text())) < -doesNotReplyTime && !kaevuriRead[i]->statusLabel->text().contains("restart", Qt::CaseInsensitive) && !kaevuriRead[i]->statusLabel->text().contains("ise")){
-                    kaevuriRead[i]->statusLabel->setText("ei vasta");
+                        QTextStream(stdout) << time.toString("hh:mm:ss") << " Sending to serial: " << package << endl;
+                    serial->write(package.toLatin1());
+                    minerRows[i]->statusLabel->setText("3. restart");
+                    minerRows[i]->restartNo++;
+                    writeToLog(minerRows[i]->nameLabel->text() + ", pin: " + minerRows[i]->portLabel->text() + ", last reply: " + minerRows[i]->timeLabel->text() + ", 3. restart");
+                }else if(time.secsTo(QTime::fromString(minerRows[i]->timeLabel->text())) < -noReplyTime && !minerRows[i]->statusLabel->text().contains("restart", Qt::CaseInsensitive) && !minerRows[i]->statusLabel->text().contains("this")){
+                    minerRows[i]->statusLabel->setText("no reply");
                 }
             }
         }
     }else{  //Klient saadab elus olemise teate
-        QByteArray datagram = oma_nimi.toLatin1() + " alive";
+        QByteArray datagram = own_name.toLatin1() + " alive";
         udpSocket->writeDatagram(datagram, QHostAddress::Broadcast, 57615);
         statusBar()->showMessage(tr("Saadetud teade: \"%1\"").arg(datagram.constData()), 5000);
     }
 
 }
 
-void MinerWatch::teeRestart(QString s)
+void MinerWatch::doRestart(QString s)
 {
-    QTime aeg(QTime::currentTime());
-    QString saadetis = QString("r%1").arg(s);   //Pesa nr on kirjas argumendis
+    QTime time(QTime::currentTime());
+    QString package = QString("r%1").arg(s);   //Pesa nr on kirjas argumendis
     if(verbose)
-        QTextStream(stdout) << aeg.toString("hh:mm:ss") << " Saadan serialisse: " << saadetis << endl;
-    serial->write(saadetis.toLatin1());
-    for(int i = 0; i < kaevuriRead.count(); i++)
-        if(kaevuriRead[i]->portLabel->text().compare(s) == 0){
-            kaevuriRead[i]->statusLabel->setText("restart");
-            kirjutaLogisse(kaevuriRead[i]->nameLabel->text() + ", pesa: " + kaevuriRead[i]->portLabel->text() + ", viimane vastus: " + kaevuriRead[i]->timeLabel->text() + ", käsitsi restart");
+        QTextStream(stdout) << time.toString("hh:mm:ss") << " Sending to serial: " << package << endl;
+    serial->write(package.toLatin1());
+    for(int i = 0; i < minerRows.count(); i++)
+        if(minerRows[i]->portLabel->text().compare(s) == 0){
+            minerRows[i]->statusLabel->setText("restart");
+            writeToLog(minerRows[i]->nameLabel->text() + ", pin: " + minerRows[i]->portLabel->text() + ", last reply: " + minerRows[i]->timeLabel->text() + ", käsitsi restart");
         }
 }

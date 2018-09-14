@@ -27,7 +27,7 @@
       <item>
        <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>Port:</string>
+         <string>Pin:</string>
         </property>
        </widget>
       </item>

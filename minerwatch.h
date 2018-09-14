@@ -40,7 +40,7 @@ public:
 
 private:
     bool server;
-    int doesNotReplyTime; //Aeg sekundites, mis hetkest näidatakse staatuseks "ei vasta"
+    int noReplyTime; //Aeg sekundites, mis hetkest näidatakse staatuseks "no reply"
     int heartBeatTime;  //Kui kaua Arduino ootab viimasest signaalist alates enne, kui juhtkaevurile restart tehakse, sekundites
     int checkInterval;     //Kui tihti kontrollitakse teiste kaevurite staatust ja enda elus olemise signaali Arduinole saadetakse, sekundites
     int maxRestartNo;   //Mitu restardi katset maksimaalselt tehakse
@@ -50,25 +50,25 @@ private:
     int restartTime3;    //Aeg, sekundites, kui kaua oodatakse teiste kaevurite elus olemise signaali, peale esimest restarti, enne, kui uus restart tehakse
     Ui::MinerWatch *ui;
     QFile *logi = nullptr; //Logifail
-    QList<KaevuriRida*> kaevuriRead;    //Rida programmi aknas iga kaevuri jaoks
+    QList<KaevuriRida*> minerRows;    //Rida programmi aknas iga kaevuri jaoks
     QList<QSerialPortInfo> ports;
 //    QMap<QString, int> kaevurid;
-    QString oma_nimi;   //Selle masina nimi
-    QTimer kontroll;    //Timer staatuste kontrolli jooksutamiseks
+    QString own_name;   //Selle masina nimi
+    QTimer checkTimer;    //Timer staatuste kontrolli jooksutamiseks
     QUdpSocket *udpSocket = nullptr;
     QSerialPort *serial = nullptr;
     Settings settings;
 
 
 private slots:
-    void avaSerial();   //Arduinoga ühenduse loomine
-    void kirjutaLogisse(QString s);
-    void loeConfFail();
-    void loeSerialist();    //Arduinoga suhtlus
-    void loeTeateid();  //Teistest arvutitest tulnud broadcast'ide lugemine
-    void otsiSerialiNimi();
-    void staatuseKontroll();
-    void teeRestart(QString s);  //Käsitsi restardi tegemine
+    void openSerial();   //Arduinoga ühenduse loomine
+    void writeToLog(QString s);
+    void readConfFail();
+    void readFromSerial();    //Arduinoga suhtlus
+    void readBroadcasts();  //Teistest arvutitest tulnud broadcast'ide lugemine
+    void findSerialName();
+    void statusCheck();
+    void doRestart(QString s);  //Käsitsi restardi tegemine
 
 };
 

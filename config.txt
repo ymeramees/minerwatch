@@ -1,32 +1,32 @@
-oma_nimi=k0007
+own_name=k0007
 server=yes
 
-#Serial pordi seaded, Arduino jaoks vaikimisi 9600, 8, noParity ja 1
+#Serial port settings, for Arduino default values are 9600, 8, noParity and 1
 baudRate=9600
 dataBits=8
 parity=0
 stopBits=1
 
-#Kui kaua Arduino juhtkaevuri signaali ootab enne, kui talle restardi teeb, sekundites
+#Time, how long Arduino waits for server signal before it restarts it, in seconds
 heartBeatTime=300
-#Kui pikalt reset nuppu restardi tegemisel all hoitakse, millisekundites
+#How long reset button will be pressed while doing restart, in milliseconds
 resetPressTime=500
 
-#Mitu korda ühele kaevurile restarti proovitakse teha
-maxRestartideArv=3
+#How many times restart to one miner is being made before giving up. This will be zeroed after the miner comes online.
+maxRestartNo=3
 
-#Kui tihti kontrollitakse teiste kaevurite staatust ja enda elusolemise signaali Arduinole saadetakse, sekundites
-kontrolliIntervall=5
+#Frequency of checking other miners' status and sending own keep-alive signal to Arduino, in seconds
+checkInterval=5
 
-#Mis ajast määratakse staatuseks "ei vasta"
-eiVastaAeg=10
+#From which time status will be "no reply"
+noReplyTime=10
 
-#Kui kaua oodatakse teiste kaevurite signaali enne, kui neile restart tehakse, sekundites. Võimalik määrata 3 erinevat aega
-restartAeg1=30
-restartAeg2=45
-restartAeg3=60
+#Timeout for waiting the keep-alive signal from other machines, before restarting them, in seconds. It is possible to define 3 different times.
+restartTime1=30
+restartTime2=45
+restartTime3=60
 
-#Jälgitavate kaevurite nimed ja vastavad Arduino pin'id. Juhtkaevur on alati Arduino pin 0
+#Names of the miners that are being watched and corresponding Arduino pins. Main miner (server) is always connected to Arduino pin 0.
 k0001;1
 k0002;2
 k02;3
