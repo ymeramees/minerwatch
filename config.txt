@@ -1,0 +1,33 @@
+oma_nimi=k0007
+server=yes
+
+#Serial pordi seaded, Arduino jaoks vaikimisi 9600, 8, noParity ja 1
+baudRate=9600
+dataBits=8
+parity=0
+stopBits=1
+
+#Kui kaua Arduino juhtkaevuri signaali ootab enne, kui talle restardi teeb, sekundites
+heartBeatTime=300
+#Kui pikalt reset nuppu restardi tegemisel all hoitakse, millisekundites
+resetPressTime=500
+
+#Mitu korda ühele kaevurile restarti proovitakse teha
+maxRestartideArv=3
+
+#Kui tihti kontrollitakse teiste kaevurite staatust ja enda elusolemise signaali Arduinole saadetakse, sekundites
+kontrolliIntervall=5
+
+#Mis ajast määratakse staatuseks "ei vasta"
+eiVastaAeg=10
+
+#Kui kaua oodatakse teiste kaevurite signaali enne, kui neile restart tehakse, sekundites. Võimalik määrata 3 erinevat aega
+restartAeg1=30
+restartAeg2=45
+restartAeg3=60
+
+#Jälgitavate kaevurite nimed ja vastavad Arduino pin'id. Juhtkaevur on alati Arduino pin 0
+k0001;1
+k0002;2
+k02;3
+k0007;0
