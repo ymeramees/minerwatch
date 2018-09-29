@@ -6,11 +6,15 @@ All computers' reset buttons are wired to the Arduino Nano. Arduino Nano is conn
 
 ## Getting Started
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+* Clone the repository and build with Qt.
+* Change config.txt file according to your setup and needs. Especially edit list of computers (miners) which you want to check.
+* Make sure that computer names and Arduino pins are correct, otherwise random computers will be restarted.
+* Main computer (server) must be connected to Arduino pin 0.
 
 ### Prerequisites
 
 Only Qt framework is needed, Qt 5.10.0 has been used.
+Windows may also need USB to Serial converter drivers to be installed, on Linux they are already built-in.
 
 ### Installing/Deployment
 
